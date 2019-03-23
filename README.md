@@ -273,6 +273,71 @@ bind()的作用是将参数sockfd和addr绑定在一起，使sockfd这个用于�
 
 如果客户端没有更多的请求了，就调用close()关闭连接，就像写端关闭的管道一样，服务器的read()返回0，这样服务器就知道客户端关闭了连接，也调用close()关闭连接。注意，任何一方调用close()后，连接的两个传输方向都关闭了，不能再发送数据了。如果一方调用shutdown()则连接处于半关闭状态，仍可接受对方发来的数据
 
+11. TCP状态
+
+> 首先先从主动发起连接的一方---- 客户端的分析
+
+首先，在刚开始的时候，客户端的TCP是close状态，这时候通常先主动发起连接，发送SYN，这时候TCP的状态变成了SYN_SENT状态，表示客户端已经发送了SYN报文 
+
+这时候服务器端接受到来自于客户端的SYN请求后，发送SYN，ACK确认，客户端接受到后，再发送ACK确认，三次握手结束，状态变为ESTABLISHED
+
+客户端在主动关闭的时候，发送FIN标志位，暂时处于FIN_WAIT_1状态，服务器会回复一个ACK，这时候客户端处于FIN_WAIT_2状态，客户端只能接受数据，不能发送数据，称之为半连接或者是半关闭状态。
+
+这时候服务器方发送FIN，客户端回复ACK，客户端整个状态变为TIME_WAIT状态。为了防止最后客户端在发送ACK的时候服务器没有接收到，所以会让客户端保持一个2MSL(Maximum Segment Lifetime)的TIME_WAIT状态，则有更大的机会让丢失的ACK被再次发送出去(服务器如果迟迟收不到ACK，则会再重新发送FIN)
+
+四次挥手结束后，返回到close状态
+
+> 再从被动连接的一方分析 ----- 服务器端的分析 
+
+依然是从close状态起始，并迅速进行listen状态，等待客户端的连接....
+
+服务器端接受SYN并发送SYN，ACK，进入SYN_RCVD状态，等待客户端的ACK，ACK收到后，进入数据传输状态ESTABLESHED
+
+服务器发送ACK确认客户端发来的FIN的时候，客户端已经断开了跟客户端的连接了，这时候，服务器处于CLOSE_WAIT状态
+
+服务器最后再发送FIN，处于LAST_ACK状态，收到最后的ACK后，服务器正式回归到CLOSE状态
+
+
+12. 半关闭
+
+当TCP连接中A发送FIN请求关闭，B端回应了ACK后（A端进入FIN_WAIT_2状态），B没有立即发送FIN给A时，A方处在半连接的状态，此时A可以接受到B发出的数据，但是A已无法再向B发送数据了
+
+从程序的角度来讲，我们可以控制半关闭状态
+
+    #include <sys/socket.h>
+    int shutdown(int sockfd,int how);
+    sockfd:需要关闭的socket描述符
+    how:允许为shutdown操作选择以下几种方式：
+        SHUT_RD(0) 关闭sockfd上的读功能，此选项将不允许sockfd进行读操作，该套接字不再接受数据，任何当前在套接字接受缓冲区的数据将被无声的丢弃掉
+        SHUT_WR(1) 关闭sockfd上的写功能，此选项将不允许sockfd进行写操作，进程不能在对此套接字发出写操作
+        SHUT_RDWR(2) 关闭sockfd的读写功能。相当于调用shutdown两次，首先是SHUT_RD,然后是SHUT_WR
+
+使用close终止一个连接，但它只是减少描述符的引用计数，并不直接关闭连接，只有当描述符的引用计数为0的时候才关闭连接
+
+13. 端口复用
+
+在server的TCP连接没有完全断开之前不允许重新监听是不合理的。因为，TCP连接没有完全断开指的是服务器127.0.0.1:6666没有完全断开，而我重新监听的是0:0:0:0:6666,虽然是占用同一个端口，但IP地址不同。
+
+解决这个问题的方法是使用setsockopt()设置socket描述符的选项SO_REUSERADDR为1，表示允许创建端口号相同但是IP地址不同的多个SOCKET描述符
+
+在server代码的socket()和bind()调用之间插入如下代码：
+	int opt = 1;
+	setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+有关setsockopt可以设置的其它选项请参考UNP第7章。
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

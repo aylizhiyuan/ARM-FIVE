@@ -44,10 +44,11 @@ int main(void)
 	int i = 0;
 	pthread_t tid;
 	struct s_info ts[256];
-
+	//创建socket套接字
 	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
-
+	//内容清空
 	bzero(&servaddr, sizeof(servaddr));
+	//参数初始化
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	servaddr.sin_port = htons(SERV_PORT);
