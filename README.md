@@ -398,7 +398,7 @@ select能监听的文件描述符个数受限于FD_SETSIZE,一般为1024，单�
 
 epoll是Linux下多路复用IO接口select/poll的增强版本，它能显著提高程序在大量并发连接中只有少量活跃的情况下的系统CPU利用率，因为它会复用文件描述符集合来传递结果而不用迫使开发者每次等待事件之前都必须重新准备要被侦听的文件描述符集合，另一点原因就是获取事件的时候，它无须遍历整个被侦听的描述符集，只要遍历那些被内核IO事件异步唤醒而加入Ready队列的描述符集合就行了。
 
-目前epell是linux大规模并发网络程序中的热门首选模型。
+目前epoll是linux大规模并发网络程序中的热门首选模型。
 
 epoll除了提供select/poll那种IO事件的电平触发（Level Triggered）外，还提供了边沿触发（Edge Triggered），这就使得用户空间程序有可能缓存IO状态，减少epoll_wait/epoll_pwait的调用，提高应用程序效率。
 
@@ -464,6 +464,90 @@ epoll除了提供select/poll那种IO事件的电平触发（Level Triggered）�
 		返回值：	成功返回有多少文件描述符就绪，时间到时返回0，出错返回-1
 
 15. epoll进阶
+
+
+
+16. UDP服务器
+
+传输层主要应用的协议模型有两种，一种是TCP协议，另外一种则是UDP协议。TCP协议在网络通信中占主导地位，绝大多数的网络通信借助TCP协议完成数据传输。但UDP也是网络通信中不可或缺的重要通信手段。
+
+相较于TCP而言，UDP通信的形式更像是发短信。不需要在数据传输之前建立、维护连接。只专心获取数据就好。省去了三次握手的过程，通信速度可以大大提高，但与之伴随的通信的稳定性和正确率便得不到保证。因此，我们称UDP为“无连接的不可靠报文传递”。
+
+那么与我们熟知的TCP相比，UDP有哪些优点和不足呢？由于无需创建连接，所以UDP开销较小，数据传输速度快，实时性较强。多用于对实时性要求较高的通信场合，如视频会议、电话会议等。但随之也伴随着数据传输不可靠，传输数据的正确率、传输顺序和流量都得不到控制和保证。所以，通常情况下，使用UDP协议进行数据传输，为保证数据的正确性，我们需要在应用层添加辅助校验协议来弥补UDP的不足，以达到数据可靠传输的目的。
+
+与TCP类似的，UDP也有可能出现缓冲区被填满后，再接收数据时丢包的现象。由于它没有TCP滑动窗口的机制，通常采用如下两种方法解决：
+服务器应用层设计流量控制，控制发送数据速度。
+
+借助setsockopt函数改变接收缓冲区大小。如：
+
+    #include <sys/socket.h>
+    int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
+    int n = 220x1024
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &n, sizeof(n));
+
+
+
+
+17. 组播
+
+组播组可以是永久的也可以是临时的。组播组地址中，有一部分由官方分配的，称为永久组播组。永久组播组保持不变的是它的ip地址，组中的成员构成可以发生变化。永久组播组中成员的数量都可以是任意的，甚至可以为零。那些没有保留下来供永久组播组使用的ip组播地址，可以被临时组播组利用。
+
+        224.0.0.0～224.0.0.255		为预留的组播地址（永久组地址），地址224.0.0.0保留不做分配，其它地址供路由协议使用；
+        224.0.1.0～224.0.1.255		是公用组播地址，可以用于Internet；欲使用需申请。
+        224.0.2.0～238.255.255.255	为用户可用的组播地址（临时组地址），全网范围内有效；
+        239.0.0.0～239.255.255.255	为本地管理组播地址，仅在特定的本地范围内有效。
+
+可使用ip ad命令查看网卡编号，如：
+
+        itcast$ ip ad
+        1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default 
+            link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+            inet 127.0.0.1/8 scope host lo
+            valid_lft forever preferred_lft forever
+            inet6 ::1/128 scope host 
+            valid_lft forever preferred_lft forever
+        2: eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc pfifo_fast state DOWN group default qlen 1000
+            link/ether 00:0c:29:0a:c4:f4 brd ff:ff:ff:ff:ff:ff
+            inet6 fe80::20c:29ff:fe0a:c4f4/64 scope link 
+            valid_lft forever preferred_lft forever
+
+
+
+
+18. 本地套接字
+
+socket API原本是为网络通讯设计的，但后来在socket的框架上发展出一种IPC机制，就是UNIX Domain Socket。虽然网络socket也可用于同一台主机的进程间通讯（通过loopback地址127.0.0.1），但是UNIX Domain Socket用于IPC更有效率：不需要经过网络协议栈，不需要打包拆包、计算校验和、维护序号和应答等，只是将应用层数据从一个进程拷贝到另一个进程。这是因为，IPC机制本质上是可靠的通讯，而网络协议是为不可靠的通讯设计的。UNIX Domain Socket也提供面向流和面向数据包两种API接口，类似于TCP和UDP，但是面向消息的UNIX Domain Socket也是可靠的，消息既不会丢失也不会顺序错乱。
+
+
+UNIX Domain Socket是全双工的，API接口语义丰富，相比其它IPC机制有明显的优越性，目前已成为使用最广泛的IPC机制，比如X Window服务器和GUI程序之间就是通过UNIXDomain Socket通讯的。
+
+
+使用UNIX Domain Socket的过程和网络socket十分相似，也要先调用socket()创建一个socket文件描述符，address family指定为AF_UNIX，type可以选择SOCK_DGRAM或SOCK_STREAM，protocol参数仍然指定为0即可。
+
+
+UNIX Domain Socket与网络socket编程最明显的不同在于地址格式不同，用结构体sockaddr_un表示，网络编程的socket地址是IP地址加端口号，而UNIX Domain Socket的地址是一个socket类型的文件在文件系统中的路径，这个socket文件由bind()调用创建，如果调用bind()时该文件已存在，则bind()错误返回。
+
+
+对比网络套接字地址结构和本地套接字地址结构：
+
+    struct sockaddr_in {
+    __kernel_sa_family_t sin_family; 			/* Address family */  	地址结构类型
+    __be16 sin_port;					 	/* Port number */		端口号
+    struct in_addr sin_addr;					/* Internet address */	IP地址
+    };
+    struct sockaddr_un {
+    __kernel_sa_family_t sun_family; 		/* AF_UNIX */			地址结构类型
+    char sun_path[UNIX_PATH_MAX]; 		/* pathname */		socket文件名(含路径)
+    };
+
+以下程序将UNIX Domain socket绑定到一个地址。
+
+    size = offsetof(struct sockaddr_un, sun_path) + strlen(un.sun_path);
+	#define offsetof(type, member) ((int)&((type *)0)->MEMBER)
+
+
+
+
 
 
 
