@@ -1,13 +1,16 @@
 /* client.c */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
+#include <string.h>
+#include <sys/socket.h>
 #include "wrap.h"
 
 #define MAXLINE 80
 #define SERV_PORT 6666
-
 int main(int argc, char *argv[])
 {
 	struct sockaddr_in servaddr;
