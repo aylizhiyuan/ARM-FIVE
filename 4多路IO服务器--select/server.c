@@ -45,6 +45,11 @@ int main(int argc,char *argv[]){
         //每次循环的时候都会将新的服务器listenfd和客户端n个fd放入监听队列中去
         rset = allset;
         //第一次监听服务器listnefd的读事件，以后监听所有已经建立好连接的客户端fd和服务器listenfd的读事件
+        //这里最复杂的情况就是同时有新的连接过来，以及客户端给服务器发送数据
+        //疑问点是如果同时有三个请求一起过来，select的返回值竟然是3
+        //这里，这三个请求应该都是通过listenfd监听到的，所以返回值应该是3
+        //同时如果客户端和服务器端同时发生了读事件的话
+        //因为有条件判断，所以不用担心
         nready = select(maxfd+1,&rset,NULL,NULL,NULL);
         if(nready < 0){
             perr_exit("select error");
@@ -77,16 +82,21 @@ int main(int argc,char *argv[]){
             }
             //客户端a建立好连接后继续循环
             //客户端b建立好连接后继续循环
-            //......
+            //这里最复杂的情况就是三个建立连接的请求一起过来,nready的返回值不是1，这时候会走到下面
+            //即便是走到下面的代码，还是会回到循环一开始的地方，因为不是客户端的读事件
             if(--nready == 0){
                 continue;
             }
         }
         //下面的代码非常的号理解，就是依次循环发生读事件的客户端进行数据处理
+        //根据maxi的值循环我们的客户端文件描述符
+        //找到所有的client[i]中不为-1的客户端描述符，也就是建立连接的文件描述符
         for(i=0;i<=maxi;i++){
             if((sockfd = client[i]) < 0){
                 continue;
             }
+            //只有当客户端发生读事件的时候，才会执行这个代码
+            //这里并不处理新的客户端发来连接的情况
             if(FD_ISSET(sockfd,&rset)){
                 //读取客户端发来的数据
                 if((n=Read(sockfd,buf,sizeof(buf))) == 0){
